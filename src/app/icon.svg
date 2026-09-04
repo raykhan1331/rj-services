@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <circle cx="100" cy="100" r="98" fill="#000" stroke="#fff" stroke-width="2" />
+  <path
+    d="M100 38 C68 38 52 70 52 102 C52 111 56 118 62 123 L67 123 C63 112 63 98 70 88 C77 99 90 104 100 104 C110 104 123 99 130 88 C137 98 137 112 133 123 L138 123 C144 118 148 111 148 102 C148 70 132 38 100 38 Z"
+    fill="#fff"
+  />
+  <ellipse cx="100" cy="100" rx="17" ry="21" fill="#000" />
+  <text
+    x="100"
+    y="160"
+    text-anchor="middle"
+    font-family="Georgia, 'Times New Roman', serif"
+    font-size="46"
+    font-weight="700"
+    fill="#fff"
+    letter-spacing="1"
+  >RJ</text>
+  <line x1="38" y1="150" x2="66" y2="150" stroke="#fff" stroke-width="1.5" />
+  <line x1="134" y1="150" x2="162" y2="150" stroke="#fff" stroke-width="1.5" />
+</svg>
