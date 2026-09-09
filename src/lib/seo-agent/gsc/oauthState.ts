@@ -1,54 +1,41 @@
-import { promises as fs } from "fs";
-import path from "path";
+import { cookies } from "next/headers";
 import { randomBytes } from "crypto";
 
-// STEP 3 Task 7 — CSRF protection for the OAuth flow. A serverless
-// deployment has no reliable shared in-memory state between the
-// /connect and /callback requests (they can hit different function
-// instances), so the pending state token is persisted the same way as
-// everything else in this project — a small file under /data — with a
-// short expiry and single-use deletion.
+// STEP 3 Task 7 — CSRF protection for the OAuth flow. Originally persisted
+// to a file under /data, but Vercel's serverless functions run on a
+// read-only filesystem outside /tmp (and /data is gitignored, so it isn't
+// even part of the deployed bundle) — every write there throws in
+// production. Fixed by storing the pending state in an HttpOnly cookie
+// instead: it only ever needs to survive one browser round-trip between
+// /connect and /callback (max 10 minutes), so the browser itself — not a
+// server-side store — is the natural, already-reliable place to carry it,
+// and it sidesteps the "which function instance handles the callback"
+// problem a file/in-memory store would have in a serverless environment
+// anyway. No new dependency, no new Vercel resource to provision.
 
-const DATA_DIR = path.join(process.cwd(), "data");
-const STATE_FILE = path.join(DATA_DIR, "gsc-oauth-state.json");
-const STATE_TTL_MS = 10 * 60 * 1000; // 10 minutes — plenty for a consent screen, short enough to limit replay risk
-
-interface StoredState {
-  value: string;
-  expiresAt: number;
-}
-
-async function ensureFile() {
-  await fs.mkdir(DATA_DIR, { recursive: true });
-  try {
-    await fs.access(STATE_FILE);
-  } catch {
-    await fs.writeFile(STATE_FILE, JSON.stringify(null));
-  }
-}
+const STATE_COOKIE = "gsc_oauth_state";
+const STATE_TTL_SECONDS = 10 * 60; // 10 minutes — plenty for a consent screen, short enough to limit replay risk
 
 export async function generateOAuthState(): Promise<string> {
-  await ensureFile();
   const value = randomBytes(24).toString("hex");
-  const stored: StoredState = { value, expiresAt: Date.now() + STATE_TTL_MS };
-  await fs.writeFile(STATE_FILE, JSON.stringify(stored));
+  const store = await cookies();
+  store.set(STATE_COOKIE, value, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax", // must survive the top-level GET redirect Google sends the browser back on
+    path: "/",
+    maxAge: STATE_TTL_SECONDS,
+  });
   return value;
 }
 
-/** Single-use: valid state is deleted immediately whether or not this
- * call matches it, so a state value can never be replayed. */
+/** Single-use: the cookie is deleted immediately whether or not this call
+ * matches it, so a state value can never be replayed. */
 export async function consumeOAuthState(candidate: string | null): Promise<boolean> {
-  await ensureFile();
-  const raw = await fs.readFile(STATE_FILE, "utf-8");
-  let stored: StoredState | null;
-  try {
-    stored = JSON.parse(raw);
-  } catch {
-    stored = null;
-  }
-  await fs.writeFile(STATE_FILE, JSON.stringify(null)); // always consume
+  const store = await cookies();
+  const stored = store.get(STATE_COOKIE)?.value ?? null;
+  store.delete(STATE_COOKIE); // always consume
 
   if (!stored || !candidate) return false;
-  if (Date.now() > stored.expiresAt) return false;
-  return stored.value === candidate;
+  return stored === candidate;
 }
