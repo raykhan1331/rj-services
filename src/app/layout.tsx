@@ -30,6 +30,15 @@ export const metadata: Metadata = {
   keywords: DEFAULT_KEYWORDS,
   robots: { index: true, follow: true },
   alternates: { canonical: "/" },
+  // Search Console (SEO Agent Step 3) requires proving ownership of the
+  // property before the API can be used. Setting GOOGLE_SITE_VERIFICATION
+  // to the meta-tag value Search Console gives you (Settings > Ownership
+  // verification > HTML tag) is the easiest method for a vercel.app
+  // subdomain, since domain/DNS verification isn't possible without
+  // owning the whole domain. Omitted entirely when unset.
+  ...(process.env.GOOGLE_SITE_VERIFICATION
+    ? { verification: { google: process.env.GOOGLE_SITE_VERIFICATION } }
+    : {}),
   openGraph: {
     type: "website",
     siteName: SITE_NAME,

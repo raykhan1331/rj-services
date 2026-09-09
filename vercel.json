@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/seo-agent/monitoring/run",
+      "schedule": "0 6 * * *"
+    }
+  ]
+}
