@@ -271,9 +271,20 @@ export default function SeoAgentDashboard() {
   }, [seoFetch, refreshGscStatus]);
 
   const tryUnlock = useCallback(
-    async (candidate: string) => {
+    async (candidateRaw: string) => {
+      // Strip accidental leading/trailing whitespace (common with
+      // copy-paste) before it ever reaches the auth check — the header
+      // comparison is exact-match, so a stray space would otherwise look
+      // like a wrong secret.
+      const candidate = candidateRaw.trim();
       setAuthError(null);
-      const ok = await loadOverview(candidate);
+      let ok = false;
+      try {
+        ok = await loadOverview(candidate);
+      } catch {
+        setAuthError("Could not reach the server to verify the admin secret. Check your connection and try again.");
+        return;
+      }
       if (ok) {
         setSecret(candidate);
         setUnlocked(true);
