@@ -3,6 +3,7 @@ import { consumeOAuthState } from "@/lib/seo-agent/gsc/oauthState";
 import { exchangeCodeForTokens } from "@/lib/seo-agent/gsc/oauthClient";
 import { saveTokens } from "@/lib/seo-agent/gsc/tokenStore";
 import { getPropertyUrl } from "@/lib/seo-agent/gsc/config";
+import { getConnectionStatus } from "@/lib/seo-agent/gsc/connection";
 import { GscError, humanMessage } from "@/lib/seo-agent/gsc/errors";
 
 // Google redirects the site owner's OWN browser here after they approve
@@ -56,6 +57,25 @@ export async function GET(req: Request) {
       true
     );
   } catch (err) {
+    // A duplicate/concurrent hit on this exact callback (e.g. a browser's
+    // link-preload/prefetch firing alongside the real navigation, or a
+    // double-click) can race with itself here: Google's authorization
+    // code is single-use, so whichever request loses that race gets
+    // rejected by Google's token endpoint even though the OTHER request —
+    // for the same approved consent — already completed the connection.
+    // Before showing an error, check whether that's what actually
+    // happened: if a connection now exists, this was a benign race, not
+    // a real failure, and the user genuinely is connected.
+    if (err instanceof GscError && err.code === "invalid-callback") {
+      const status = await getConnectionStatus();
+      if (status.state === "connected") {
+        return htmlResponse(
+          "Search Console connected",
+          `RJ Services is authorized to read Search Console performance data for ${getPropertyUrl()}. You can close this tab.`,
+          true
+        );
+      }
+    }
     const message = err instanceof GscError ? humanMessage(err.code) : humanMessage("unknown-error");
     return htmlResponse("Connection failed", message, false);
   }
