@@ -65,6 +65,23 @@ export async function exchangeCodeForTokens(code: string): Promise<TokenResponse
   });
 
   if (!res.ok) {
+    // Diagnostic only — Google's token endpoint reports WHY a code was
+    // rejected (e.g. "invalid_grant", "redirect_uri_mismatch") via a flat
+    // { error, error_description } JSON body. Never logged before, so
+    // every prior failure here was a black box. Log ONLY these two
+    // fields — never the authorization code, client secret, or any
+    // token — since neither field can itself contain a credential (they
+    // describe the failure, they don't echo request/response secrets).
+    try {
+      const errorBody = await res.json();
+      console.error("[gsc-oauth] token exchange rejected", {
+        httpStatus: res.status,
+        error: errorBody?.error,
+        error_description: errorBody?.error_description,
+      });
+    } catch {
+      console.error("[gsc-oauth] token exchange rejected", { httpStatus: res.status, error: "(non-JSON response body)" });
+    }
     if (res.status === 400 || res.status === 401) {
       throw new GscError("invalid-callback", "Google rejected the authorization code (it may have expired or already been used).");
     }
