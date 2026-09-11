@@ -2,6 +2,8 @@ import { fetchPeriodComparison } from "./performance";
 import { detectAllGscOpportunities } from "./opportunities";
 import { getDecryptedTokens } from "./tokenStore";
 import { saveLatestPerformance } from "./performanceStore";
+import { analyzeGscOpportunities } from "./opportunityAnalysis";
+import { saveLatestOpportunityAnalysis } from "./opportunityStore";
 import { GscError } from "./errors";
 import { reconcileIssues, reconcileActions } from "../store";
 import { toIssueRecord, generateActionQueue } from "../actionQueue";
@@ -49,6 +51,14 @@ export async function runGscAnalysis(): Promise<GscAnalysisResult> {
   await reconcileIssues(allIssues.map((issue) => toIssueRecord(issue, now)), "search-console");
   await reconcileActions([...generateActionQueue(issues), ...generateActionQueue(technicalCrossCheckIssues, "review-required")], "search-console");
   await saveLatestPerformance(comparison);
+
+  // STEP 12 — additive only: a separate, structured opportunity analysis
+  // over the same comparison data, persisted to its own Redis key. Does
+  // not change this function's return shape, so the existing
+  // /api/seo-agent/gsc/performance route (and everything reading its
+  // response) is completely unaffected by this addition.
+  const opportunityAnalysis = analyzeGscOpportunities(comparison, tokens.propertyUrl);
+  await saveLatestOpportunityAnalysis(opportunityAnalysis);
 
   return { comparison, issues: allIssues, technicalCrossCheckIssues };
 }

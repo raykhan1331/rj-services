@@ -891,6 +891,76 @@ export interface GscDashboardData {
 }
 
 // ---------------------------------------------------------------------
+// STEP 12 — GSC Performance Opportunity Analysis. A separate, additive
+// view over the same GscPeriodComparison data gsc/opportunities.ts
+// already turns into SeoIssue/action-queue entries — that existing
+// pipeline is untouched. This one exists for a different purpose: a
+// structured, explicitly-labeled-as-real-Google-data opportunity report
+// (not funneled into the action queue), so nothing here can affect any
+// existing feature. "Query/page mismatch" opportunities are deliberately
+// NOT duplicated here — Step 4's keyword-intelligence system
+// (cannibalization.ts, queryPageMapping.ts) already covers that using
+// the combined query+page+device breakdown, a fetch this module doesn't
+// have access to and shouldn't re-request.
+// ---------------------------------------------------------------------
+
+export type GscOpportunityType =
+  | "high-impressions-low-ctr"
+  | "near-page-one-position"
+  | "poor-position"
+  | "page-weak-engagement"
+  | "declining-page-clicks"
+  | "declining-page-impressions"
+  | "declining-site-clicks"
+  | "declining-site-impressions"
+  | "high-performer-link-opportunity";
+
+export type GscOpportunityPriority = "critical" | "high" | "medium" | "low";
+
+/** Only ever populated from real values already present on a GscRow /
+ * GscPerformanceSummary — never a calculated or estimated number. */
+export interface GscOpportunityMetrics {
+  clicks?: number;
+  impressions?: number;
+  ctr?: number; // 0-1, as GSC returns it
+  position?: number;
+  previousClicks?: number;
+  previousImpressions?: number;
+  changePct?: number; // negative = decline
+}
+
+export interface GscOpportunity {
+  id: string;
+  opportunityType: GscOpportunityType;
+  affected: { query?: string; page?: string };
+  /** Real Google Search Console numbers only. */
+  metrics: GscOpportunityMetrics;
+  whyItMatters: string;
+  recommendedAction: string;
+  priority: GscOpportunityPriority;
+  /** 0-100, deterministic — always derivable from `metrics` alone (see
+   * opportunityAnalysis.ts's confidence functions), never a fixed/guessed
+   * number and never randomized. */
+  confidence: number;
+  /** Always this literal — this module only ever runs against real GSC
+   * API responses, never invents an opportunity from calculated-only
+   * data. Distinguishes this from e.g. on-page/crawl-derived SeoIssues. */
+  source: "google-search-console";
+  detectedAt: string;
+}
+
+export interface GscOpportunityAnalysis {
+  generatedAt: string;
+  dateRange: GscDateRange;
+  propertyUrl: string;
+  /** True only when the underlying comparison had zero clicks AND zero
+   * impressions — lets a consumer show an honest "no data yet" state
+   * instead of an empty list that looks like "no opportunities found". */
+  hasUnderlyingData: boolean;
+  opportunities: GscOpportunity[];
+}
+
+// ---------------------------------------------------------------------
 // STEP 4 — Keyword & Search-Intent Intelligence types.
 // ---------------------------------------------------------------------
 
