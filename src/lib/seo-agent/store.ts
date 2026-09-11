@@ -1,13 +1,26 @@
 import { promises as fs } from "fs";
 import path from "path";
+import { Redis } from "@upstash/redis";
 import type { PageRecord, SeoActionQueueItem, SeoChangeRecord, SeoIssueRecord, SeoIssueSource } from "./types";
 
-// File-based persistence for the SEO Agent's data model (STEP 2 Task 2) —
-// same pattern as src/lib/leads/store.ts and seo-agent/history.ts. Lives
-// under /data, which is git-ignored. Same known limitation as the leads
-// store: a serverless deployment's filesystem isn't guaranteed to persist
-// across invocations, so this is a local-dev-friendly foundation; a real
-// database is a fair upgrade for a later step, not required now.
+// Persistence for the SEO Agent's data model (STEP 2 Task 2) — pages,
+// issues, changes, and the action queue, all in one blob (same pattern
+// as src/lib/leads/store.ts and seo-agent/history.ts).
+//
+// Originally a JSON file under /data — Vercel's serverless functions run
+// on a read-only filesystem outside /tmp, so every write there threw in
+// production (same class of bug already fixed for GSC tokens in
+// tokenStore.ts). Same fix applied here: Redis when configured (separate
+// key from gsc:tokens and gsc:performance — never stores a Google
+// token), file fallback for local dev. Reads never write as a side
+// effect — a missing key/file cleanly returns the empty shape.
+
+const REDIS_KEY = "seo-agent:data";
+
+function getRedis(): Redis | null {
+  if (!(process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL)) return null;
+  return Redis.fromEnv();
+}
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const DATA_FILE = path.join(DATA_DIR, "seo-agent-data.json");
@@ -21,19 +34,14 @@ interface StoredData {
 
 const EMPTY: StoredData = { pages: [], issues: [], changes: [], actions: [] };
 
-async function ensureFile() {
-  await fs.mkdir(DATA_DIR, { recursive: true });
-  try {
-    await fs.access(DATA_FILE);
-  } catch {
-    await fs.writeFile(DATA_FILE, JSON.stringify(EMPTY, null, 2));
-  }
-}
-
 async function readData(): Promise<StoredData> {
-  await ensureFile();
-  const raw = await fs.readFile(DATA_FILE, "utf-8");
+  const redis = getRedis();
+  if (redis) {
+    const value = await redis.get<StoredData>(REDIS_KEY);
+    return value ? { ...EMPTY, ...value } : { ...EMPTY };
+  }
   try {
+    const raw = await fs.readFile(DATA_FILE, "utf-8");
     return { ...EMPTY, ...JSON.parse(raw) };
   } catch {
     return { ...EMPTY };
@@ -41,7 +49,12 @@ async function readData(): Promise<StoredData> {
 }
 
 async function writeData(data: StoredData) {
-  await ensureFile();
+  const redis = getRedis();
+  if (redis) {
+    await redis.set(REDIS_KEY, data);
+    return;
+  }
+  await fs.mkdir(DATA_DIR, { recursive: true });
   await fs.writeFile(DATA_FILE, JSON.stringify(data, null, 2));
 }
 
